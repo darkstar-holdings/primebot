@@ -25,5 +25,10 @@ primebot.pl is built on top of a few CPAN modules that are somewhat dependency h
 * Net::Twitter
 * Math::Prime::Util
 
+You must create a config file based on 'conf/primebot.conf.template' and call it
+'primebot.conf'. Insert the Twitter credentials and setting your log4perl
+levels and locations in that file and the primebot should begin tweeting primes
+to your Twitter account.
+
 ## CHANGELOG ##
 * Version 0.02 - Initial Release
