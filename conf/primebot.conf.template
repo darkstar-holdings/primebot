@@ -1,0 +1,15 @@
+pid = log/primebot.pid
+
+[log4perl]
+log4perl.rootLogger                                = DEBUG, LOGFILE
+log4perl.appender.LOGFILE                          = Log::Log4perl::Appender::File
+log4perl.appender.LOGFILE.filename                 = log/primebot.log
+log4perl.appender.LOGFILE.layout                   = PatternLayout
+log4perl.appender.LOGFILE.layout.ConversionPattern = %d [%P] [%p] %m%n
+
+[twitter]
+username            =
+consumer_key        =
+consumer_secret     =
+access_token        =
+access_token_secret =

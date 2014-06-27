@@ -1,0 +1,129 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+
+our $VERSION = '0.02';
+
+use Carp;
+use FindBin qw( $Bin );
+use English qw( -no_match_vars );
+use Readonly;
+use File::Spec::Functions qw( catfile );
+use File::Basename qw( basename );
+use Config::Tiny;
+use App::Daemon qw( daemonize );
+use Net::Twitter;
+use Try::Tiny;
+use Scalar::Util qw( blessed );
+use DateTime::Format::DateParse;
+use Math::Prime::Util;
+use Data::Dumper;
+
+# Constants
+Readonly::Scalar my $APP_NAME => basename( $PROGRAM_NAME, qw{ .pl } );
+
+my $prime     = 0;
+my $posted_at = undef;
+
+# Load application config
+my $conf_file = catfile( $Bin, 'conf', $APP_NAME . '.conf' );
+my $config = Config::Tiny->read($conf_file) || croak "Failure reading conf file $conf_file";
+
+# Create log4perl_conf scalar (for passing around as required)
+croak 'No log4perl config found. Aborting!' if ( !exists $config->{'log4perl'} );
+my $log4perl_conf = undef;
+while ( my ( $key, $val ) = each %{ $config->{'log4perl'} } ) {
+    $log4perl_conf .= sprintf "%s = %s\n", $key, $val;
+}
+
+$App::Daemon::pidfile = $config->{'_'}->{'pid'}; # Set App::Daemon pid file location
+$App::Daemon::l4p_conf = \$log4perl_conf;    # Set App::Daemon to log to my file
+daemonize() || croak 'Failed to damonize. Aborting!';
+
+# Initialize application log4perl
+Log::Log4perl::init( \$log4perl_conf );
+my $log = Log::Log4perl->get_logger('rootLogger') || croak 'Failure configuring log4perl. Aborting!';
+$log->info('Application initialtized successfully');
+
+$log->trace('Initializing Net::Twitter Bot');
+my $twitter = Net::Twitter->new(
+    traits              => [qw/ API::RESTv1_1 /],
+    consumer_key        => $config->{'twitter'}->{'consumer_key'},
+    consumer_secret     => $config->{'twitter'}->{'consumer_secret'},
+    access_token        => $config->{'twitter'}->{'access_token'},
+    access_token_secret => $config->{'twitter'}->{'access_token_secret'},
+    ssl                 => 1
+);
+if ( !$twitter ) {
+    $log->error('Failure loading twitter object. Aborting!');
+    exit 1;
+}
+$log->trace('Net::Twitter Bot created');
+
+$log->debug('Searching for last prime number');
+try {
+    $log->trace('Getting status tweets from home timeline');
+    my $statuses = $twitter->home_timeline();
+    for my $status ( @{$statuses} ) {
+        if ( $status->{'user'}->{'screen_name'} eq $config->{'twitter'}->{'username'} ) {
+            my $text = $status->{'text'};
+            $log->trace("Processing Tweet: $text");
+            if ( $text =~ m/^(([-+] ?)?\d+(,\d+)?)/xm ) {
+                $prime = $1;
+                $posted_at = DateTime::Format::DateParse->parse_datetime( $status->{'created_at'} );
+                last;
+            }
+        }
+    }
+}
+catch {
+    if ( blessed $_ && $_->isa('Net::Twitter::Error') ) {
+        $log->error( $_->error );
+        my $dumper = Data::Dumper->new( [ $_->http_response ] );
+        $dumper->Purity(1)->Terse(1)->Deepcopy(1);
+        $log->error( $dumper->Dump );
+        exit 1;
+    }
+    else {
+        $log->error("Failure retreiving last posted prime number: $_");
+        exit 1;
+    }
+};
+
+if ( !$posted_at ) {
+    $posted_at = DateTime->now()
+}
+$log->info( sprintf( "Last post %s occurred on %s", $prime, $posted_at->strftime("%m/%d/%Y %H:%M") ) );
+$prime =~ s/,//gxm;    # We don't need comma for processing
+
+while () {
+    $log->trace('Generating next prime number');
+    $prime = Math::Prime::Util::next_prime($prime);
+
+    $log->trace('Generating next post timestamp');
+    my $post_on = $posted_at + DateTime::Duration->new( hours => 1 );
+    $post_on->set_minute(0);
+    $post_on->set_second(0);
+    $log->info( "Queuing '$prime' post to Twitter for " . $post_on->strftime("%m/%d/%Y %H:%M") );
+    while ( $post_on > DateTime->now() ) {
+        sleep(10);
+    }
+
+    $log->info("Posting '$prime' to Twitter.");
+    my $success = 0;
+    while ( !$success ) {
+        try {
+            $twitter->update("$prime");
+        }
+        catch {
+            $log->error("Twitter update failed: $_");
+            sleep(5);
+        }
+        finally {
+            $log->info('Successful post');
+            $success   = 1;
+            $posted_at = DateTime->now();
+        }
+    }
+}
