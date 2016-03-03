@@ -30,5 +30,12 @@ You must create a config file based on 'conf/primebot.conf.template' and call it
 levels and locations in that file and the primebot should begin tweeting primes
 to your Twitter account.
 
+## Docker ##
+This process fits nicely into a docker container. The Dockerfile is included so
+you can build the container to run the process. You will have to create your
+config file using the supplied template. I send my logs directly to STDOUT for
+docker to pickup the logs.
+
 ## CHANGELOG ##
+* Version 0.03 - Converted process to run in a docker container
 * Version 0.02 - Initial Release
