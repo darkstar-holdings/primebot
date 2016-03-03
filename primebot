@@ -3,7 +3,7 @@
 use strict;
 use warnings;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 use Carp;
 use FindBin qw( $Bin );
@@ -27,7 +27,7 @@ my $prime     = 0;
 my $posted_at = undef;
 
 # Load application config
-my $conf_file = catfile( $Bin, 'conf', $APP_NAME . '.conf' );
+my $conf_file = catfile( $Bin, $APP_NAME . '.conf' );
 my $config = Config::Tiny->read($conf_file) || croak "Failure reading conf file $conf_file";
 
 # Create log4perl_conf scalar (for passing around as required)
